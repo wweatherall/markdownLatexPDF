@@ -1,6 +1,6 @@
 # markdownLatexPDF
-my templates and scripts that make dealing with writing a bit easier
 
+The goal of this project is to smooth some of the rough edges of writing academic papers through the use of multimarkdown and latex and smooth some of the rough edges of dealing with those.  
 
 1. Install $\LaTeX$ and Bib$\TeX$:
 
