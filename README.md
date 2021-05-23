@@ -9,15 +9,17 @@ The goal of this project is to smooth some of the rough edges of writing academi
 
 2. Install multimarkdown 5, available here: https://github.com/fletcher/MultiMarkdown-5/releases/download/5.4.0/MultiMarkdown-Mac-5.4.0.dmg
 
-3. Get the files from here
+3. Get the texmf.zip file from here and install it in your library folder. There's a script that may help you with that in the folder itself. This is where you'll find some basic templates to get you started.
 
-4. Optional: Download the multimarkdown template files: https://github.com/fletcher/peg-multimarkdown-latex-support
+4. Optional: Download the multimarkdown template files: https://github.com/fletcher/peg-multimarkdown-latex-support Fletcher T. Penny (the creator of MMD) has much more elaborate ones for you if you want them. 
 
 5. Run the folder moving script while the folder you download from here is in your downloads folder or do it manually. 
 
    (If you use the script it will give you the option to create a shortcut on your desktop. This is useful while you calibrate your .tex template files to your liking)
 
 6. Install the service
+
+# more on the template files
 
 The template files go into your hidden library directory under the home folder. To view it press <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>.</kbd> while in your home folder. 
 
