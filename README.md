@@ -2,7 +2,7 @@
 
 The goal of this project is to smooth some of the rough edges of writing academic papers through the use of multimarkdown and latex and smooth some of the rough edges of dealing with those.  
 
-1. Install LaTeX$ and BibTeX:
+1. Install LaTeX and BibTeX:
 
    MacTeX (a latex package with everything you could ever need) is available here: http://www.tug.org/mactex/
    Or use 'brew install mactex' in the terminal if you have home brew installed
