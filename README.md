@@ -27,5 +27,5 @@ Folder Structure:
 
 <img width="415" alt="FolderLayout" src="https://user-images.githubusercontent.com/84057259/119235024-b9abed80-baed-11eb-94b2-970b3a56c860.png">
 
-The .tex files themselves will go into your mmd folder. The .bib file goes in the bib folder. If you make any .cls files, they can go in the latex folder.
+The .tex files themselves will go into your mmd folder. The .bib file goes in the bib folder. If you make any .cls files, they can go in the latex folder. The .bst file (bibliography style) goes in the bst folder. If you want more styles and templates, you can find almost anything at https://ctan.org/
 
