@@ -5,7 +5,8 @@ The goal of this project is to smooth some of the rough edges of writing academi
 1. Install LaTeX and BibTeX:
 
    MacTeX (a latex package with everything you could ever need) is available here: http://www.tug.org/mactex/
-   Or use 'brew install mactex' in the terminal if you have home brew installed
+   
+   Or use ```'brew install mactex'``` in the terminal if you have home brew installed
 
 2. Install multimarkdown 5, available here: https://github.com/fletcher/MultiMarkdown-5/releases/download/5.4.0/MultiMarkdown-Mac-5.4.0.dmg
 
