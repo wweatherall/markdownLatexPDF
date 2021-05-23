@@ -1,0 +1,674 @@
+-- the UNIXtime commands are just to give a picture of where the time is going
+set UNIXtime1 to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+
+
+(**************************************************
+ *    		THESE ARE WHERE YOU ENTER THE NAMES	 	*
+ *      	 	OF YOU DEFAULT LATEX FILES.	     			*
+ *				STORE THEM AT: 						*
+ * 		/Users/YoUrNaMe/Library/texmf/tex/latex 			*
+ **************************************************)
+set defaultLatexHeader to "APAs"
+set defaultLatexBody to "APAb"
+set defaultLatexFooter to "APAf"
+
+(*	The APA documents look best at level four and fail if part or chapter
+	are passed on. These are # and ## by default. This will protect your
+	APA document from failing to build by treating # as section. You can
+	override it in your document by entering  "base header level: 4" for
+	example if you would prefer to use # as subsection.					*)
+set defaultBaseHeaderLevel to 3
+
+(*************************************************
+ *    												      *
+ *	   FIND THE FOLLOWING 3 ITEMS BY USING THE	      *
+ *             'which' COMMAND IN THE TERMINAL		      *
+ *			(ex: which pdflatex)					      *
+ *    												      *
+ *************************************************)
+
+(*************************************************
+ *    THIS IS WHERE YOU PUT THE LOCATION OF YOUR	      *
+ *            MULTIMARKDOWN INSTALLATION 			      *
+ *************************************************)
+set multimarkdownEx to "/usr/local/bin/multimarkdown"
+set multimarkdownEx to nameProtector(multimarkdownEx)
+
+
+(*************************************************
+ *    THIS IS WHERE YOU PUT THE LOCATION OF YOUR	      *
+ *             	 PDFLATEX INSTALLATION 				      *
+ *************************************************)
+set pdflatexEx to "/Library/TeX/texbin/pdflatex"
+set pdflatexEx to nameProtector(pdflatexEx)
+
+
+(*************************************************
+ *    THIS IS WHERE YOU PUT THE LOCATION OF YOUR	      *
+ *               BIBTEX INSTALLATION 					      *
+ *************************************************)
+
+set bibtexEx to "/Library/TeX/texbin/bibtex"
+set bibtexEx to nameProtector(bibtexEx)
+
+-- saves document to give script access to the latest version
+tell application "TextEdit"
+	save document 1
+	tell document 1
+		set locationGetterPath to its path as text
+	end tell
+end tell
+
+(*	The following is a piece of code I got off stack exchange. It
+ 	reverses the string and then finds the first occurance of a
+  	character.
+
+  	It allows you to isolate the location of a file (in this case)
+  	or later you will see it isolate the file name*)
+set location to characters 1 thru -((offset of "/" in (reverse of items of locationGetterPath as string)) + 1) of locationGetterPath as string
+
+-- store an unwrapped location value for use later
+set unprotectedLocation to location
+(* nameProtector wraps whatever you put into it in apostrophes to protect it
+from errors in the terminal which cannot deal with spaces*)
+set location to nameProtector(location)
+log "this is folder's location: " & location
+
+
+(*	This sets up a variable to tell the terminal which shell to use and
+	includes the change directory command (cd) so that later whatever
+	directory comes after it, the terminal will run the programs on the
+	files in that place.											*)
+set terminalEnvironment to "zsh; cd "
+set termSetUp to terminalEnvironment & location & "; "
+log termSetUp
+
+
+-- The following isolates the file name.
+set textFileName to characters -1 thru -((offset of "/" in (reverse of items of locationGetterPath as string)) - 1) of locationGetterPath as string
+--display dialog "this is textFileName: " & textFileName
+(*This one gets rid of the extension so you can just append
+it easily instead of writing it again.*)
+
+
+set fileType to characters -((offset of "." in (reverse of items of textFileName as string)) - 1) thru -1 of textFileName as string
+-- display dialog fileType
+if fileType is "txt" or "md" then
+else
+	display dialog "not a plain text file"
+	return 1
+end if
+
+
+set FileBase to characters -((offset of "." in (reverse of items of textFileName as string)) + 1) thru 1 of textFileName as string
+log FileBase
+-- display dialog "this is fileBase: " & fileBase
+
+-- this uses the isolated name to target the text file
+set textFile to textFileName
+
+
+(* 	This is the text processing function. It writes your text file to a new temp
+	document where modifies the metadata. This one allows more natural
+	and autmated input of metadata. For example it will use the first heading
+	as the name of the document. It also adds default latex template files to
+	the metadata unless the user has already inputed them. 					*)
+set resultsOfTBP to textBodyProcessor(locationGetterPath, defaultLatexHeader, defaultLatexBody, defaultLatexFooter, defaultBaseHeaderLevel, FileBase)
+
+-- the following allows the script to reference the new temp file by name
+set tempFileSuffix to item 1 of resultsOfTBP
+set tempFile to FileBase & tempFileSuffix
+set tempFile to nameProtector(tempFile)
+
+-- this next one tells it whether or not to bother with bibtex
+set hasBibliography to item 2 of resultsOfTBP
+
+
+-- now we create a name for the tex file we are about to create
+set texName to FileBase & ".tex"
+set texName to nameProtector(texName)
+set textFile to nameProtector(textFile)
+log "textFile is: " & textFile
+
+
+(*	The following generates the command to be sent to the shell. It cds into
+	the directory, uses the multimarkdown command, specifies its output and
+	directs it to our temp file. (The timer script flags just befor mmd is run)		*)
+set mmd2Tex to termSetUp & multimarkdownEx & " -t latex -o " & texName & " " & tempFile
+set UNIXtime2 to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+
+
+(*	This fires the command. The 'repeat' while just checks to make sure that
+	the terminal can find the file. In some test runs the time between the
+	creation of the temp file and the running of mmd2Tex wasn't long enough
+	for it to see it. This makes it try to run mmd until the file appears.			*)
+set repeatLoopExit to false
+set errorTimes to 0
+repeat while repeatLoopExit is false
+	try
+		do shell script mmd2Tex
+		set repeatLoopExit to true
+	on error
+		set errorTimes to errorTimes + 1
+	end try
+end repeat
+-- display dialog errorTimes
+log "This is texName: " & texName
+-- another time flag to see how long mmd took
+set UNIXtime3 to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+set notLatexsFault to 0.0
+
+
+(*************************************************
+ *  THIS PART ALLOWS YOU TO REMAKE THE CITATIONS TO	*
+ *             	FORMATS YOU WANT.						*
+ *													*
+ *   	In the one below, I set it so '[#;' will send a 'citealp{}'	*
+ *   	command to natbib. This can be used to change		*
+ *	the two main citation styles as well as define your		*
+ *	own, like I did here. Just remember to do the work		*
+ * 	on the .tex file so you need to figure out what mmd is	*
+ * 	turning the different citations into. 		 			*
+ *													*
+ *	Warning: this uses the terminal so spaces between 		*
+ *	words cause errors									*
+ *************************************************)
+replaceWordsNoSpaces(termSetUp, texName, "citep{;", "citealp{")
+
+-- 1st round of pdflatex to create the aux files
+do shell script termSetUp & " " & pdflatexEx & " " & texName
+
+-- tells the script what the name of the aux files will be so it can tell bibtex which file to run on
+set auxName to FileBase & ".aux"
+set auxName to nameProtector(auxName)
+
+log "This is auxName: " & auxName
+
+-- takes the value from the textBodyProcessor on whether the file needs a bibliography and if it doesn't it skips the rest of the script
+if hasBibliography is true then
+	try
+		-- bibtex to create the various bibliography files
+		do shell script termSetUp & " " & bibtexEx & " " & auxName
+	on error
+		display dialog "Either you have no references or there is an error with something reference related"
+	end try
+	try
+		-- 2nd round of pdflatex to get the bibliography in the end
+		do shell script termSetUp & " " & pdflatexEx & " " & texName
+	on error
+		(* Sometimes an error can be caused by unescaped & and $ (they need to be \$ and
+		 \& for latex to not choke on them). Bibtex will not register them as errors, so they
+		 are only found on the second run of pdflatex. This section will run if an error happens
+		 in this part and it will attempt to escape all the problem characters in the bib file. It
+		 will then junk the aux files, which will prevent the problem from getting fixed if they
+		 hang around. 														*)
+
+		set UNIXtimePause to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+		bibFileFixer()
+		set suffixes to {".bbl", ".blg", ".aux"}
+		repeat with suffix in suffixes
+			auxFileDeleter(suffix, FileBase, terminalEnvironment, location)
+		end repeat
+		set UNIXtimeUnpause to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+		set notLatexsFault to UNIXtimeUnpause - UNIXtimePause
+
+		-- catches this case up to the rest of the script after editting the tex file
+		do shell script termSetUp & " " & pdflatexEx & " " & texName
+		do shell script termSetUp & " " & bibtexEx & " " & auxName
+		do shell script termSetUp & " " & pdflatexEx & " " & texName
+	end try
+	-- 3rd round of pdflatex to get the citations right
+	do shell script termSetUp & " " & pdflatexEx & " " & texName
+end if
+
+
+(******************************************************
+ *		If you have any files getting left over,	below			 *
+ *		is where you put the suffix of the type that				 *
+ *		you need to remove. 								 *
+ *														 *
+ ******************************************************)
+set suffixes to {".bbl", ".blg", ".aux", ".log", ".out", tempFileSuffix, ".synctex.gz", ".synctex", ".ttt"}
+
+(*	This just goes through each item of the array created above it and
+	sends them to the deleting function.								*)
+repeat with suffix in suffixes
+	auxFileDeleter(suffix, FileBase, terminalEnvironment, location)
+end repeat
+
+-- opens resulting PDF
+set finalFile to unprotectedLocation & "/" & FileBase & ".pdf"
+-- gets the length of time it took in total
+set UNIXtime4 to do shell script "perl -e 'use Time::HiRes qw(time); print time'"
+display dialog finalFile & " took " & (round ((UNIXtime4 - UNIXtime1) * 1000)) / 1000 & " seconds to produce.
+
+The division of time was " & (round ((UNIXtime3 - UNIXtime2) * 1000)) / 1000 & " seconds being the multimarkdown engine and " & (round ((UNIXtime4 - UNIXtime3 - notLatexsFault) * 1000)) / 1000 & " seconds being the LaTeX engine."
+
+-- sometimes Finder can't get the file. Don't know why. This part is fine to fail silently though
+try
+	tell application "Finder"
+		open POSIX file finalFile as alias
+	end tell
+end try
+
+
+
+(********************************************END OF SCRIPT**********************************************)
+
+
+
+(*	This function wraps whatevery you put into it in '   ' so that it doesn't
+	throw an error in the terminal									*)
+on nameProtector(nameNeedingProtecting)
+	set nameNeedingProtecting to "'" & nameNeedingProtecting & "'"
+	return nameNeedingProtecting
+end nameProtector
+
+(*	This function uses the information from the suffix array and the other
+	things to create a terminal command that deletes the aux files		*)
+on auxFileDeleter(fileSuffix, baseName, terminalEnvironment, location)
+	set deleteMe to baseName & fileSuffix
+	set deleteMe to nameProtector(deleteMe)
+	try
+		do shell script terminalEnvironment & location & "; " & "rm " & deleteMe
+	end try
+end auxFileDeleter
+
+(*	This is a find and replace function I got from stack exchange *)
+on replaceCharacters(thisText, searchString, replacementString)
+	set AppleScript's text item delimiters to the searchString
+	set the itemList to every text item of thisText
+	set AppleScript's text item delimiters to the replacementString
+	set thisText to the itemList as string
+	set AppleScript's text item delimiters to ""
+	return thisText
+end replaceCharacters
+
+(*	This is the funtion that fixes/automates the creation of the metadata, puts all
+	the text with the improved metadata into a temp.txt file and then passes back
+	the name of that file and whether it needs to run bibtex or not to main					*)
+on textBodyProcessor(targetFilePathname, defaultLatexHeader, defaultLatexBody, defaultLatexFooter, defaultBaseHeaderLevel, nameOfFile)
+
+	(* 	gets the content of the text file and puts it in a variable. It is extremely
+		important to get the 'class' correct or you'll get weird characters					*)
+	set textBody to (read POSIX file targetFilePathname as «class utf8»)
+
+	--gets first markdown paragraph (markdown requires 2 returns for a new one)
+	set firstPart to firstPartGetter(textBody)
+	log firstPart
+	(*	separates actual metadata from text (with special case
+	for the first heading which gets turned into a title if a title
+	not already chosen)									*)
+	set metaReturn to metadataSeperator(firstPart, ":", nameOfFile)
+	set metadataRowCount to the second item of firstPart
+	set firstPart to the first item of metaReturn
+	log firstPart
+	--display dialog firstPart
+	--display dialog "text body:" & (ASCII character 10) & (ASCII character 10) & textBody
+
+	-- puts that firstPart back on the textBody with metadata separated by 2 returns
+	set textBody to firstPartReplacer(textBody, firstPart)
+
+	-- gets the new metadata (if there is any)
+	set firstPart to firstPartGetter(textBody)
+	log firstPart
+	(*	Settles all family business: title added if not present, latex inputs are put on either end
+		of the metadata so as to prevent information being passed on in a way that is not usefull for
+		LaTeX. Deals with the weird case of only one latex input specified.							*)
+	set firstPart to titleAndLatexInputSorter(firstPart, nameOfFile, defaultLatexHeader, defaultLatexBody)
+
+	(*	checks to see if "latex input:" is already specified and
+		if it isn't it puts header and body latex inputs in *)
+	set firstPart to manageLatexInputs(firstPart, defaultLatexHeader, defaultLatexBody)
+
+
+	(*	checks if there is a letex footer if there are citations. If there are citations
+		but no footer, it slaps a Latex footer containing a bibliography on to the end. *)
+	set firstPart to addBibliographyIfThereAreCitations(textBody, firstPart, defaultLatexFooter)
+
+	(* 	checks to see if file will need to be processed through bibtex and then, consequently,
+	pdflatex twice afterwards *)
+	set hasBibliography to false
+	if doesStringContain(firstPart, "latex footer:") then set hasBibliography to true
+
+	(*	adds a header level command to the beginning of the document mmd uses the lowest one to
+		determine its value so it just slaps one up there regardless. *)
+	set firstPart to addBaseHeaderLevel(firstPart, defaultBaseHeaderLevel)
+	log textBody
+	--puts the modified header files back into the body
+	set textBody to firstPartReplacer(textBody, firstPart)
+	log textBody
+	(*	sends the text to a temporary file and gets back the suffix of that file so it can be pointed
+	 	to by the command line and eventually the deletion function				*)
+	set newFileSuffix to passTextToTempFile(textBody, targetFilePathname)
+
+	(* 	this is the part that sends the temp file's suffix and whether it will need a bibliography or
+		not back to main *)
+	return {newFileSuffix, hasBibliography}
+end textBodyProcessor
+
+on metadataSeperator(textBody, characterToCheck, nameOfFile)
+	(*	The text item delimiters just let the text be divided up into a list where
+		each item is what is seperated by the delimiter. Example: if the delimiter is
+		set to 'guy', 'Hey guy's what is that guy over there doing?', we would get a
+		three item list {"Hey ", "'s what is that ", " over there doing?"}. It's used in
+		find and replace, but I also find it to be a faster method for breaking text
+		into units. The following section is much faster than using AppleScript's built-
+		in paragraph command.
+
+		The default is {""}, setting it back to the default is just to protect me if I
+		made an error elsewhere.										*)
+	--display dialog textBody
+	set AppleScript's text item delimiters to {""}
+	-- *****ASCII character 10 is new line*****
+	set AppleScript's text item delimiters to ASCII character 10
+	set allTheLines to text items of textBody
+	set AppleScript's text item delimiters to {""}
+	set countOf to 0
+	set foundTitle to 0
+	-- the next line deals with the very strang case where the first row is blank.
+	if (count of allTheLines) is greater than 0 and item 1 of allTheLines is "" then set item 1 of allTheLines to ASCII character 10
+	-- checks each line for the different cases and stores pertinent info to the variables defined above
+	repeat with each in allTheLines
+		if character 1 of each is "#" then
+			if foundTitle = 0 then
+				set item (countOf + 1) in allTheLines to turnHeadingIntoMetadata(each)
+			else (* i.e. if it has a title already then this just puts a new line between the metadata and the heading so it doesn't get disapeared by mmd *)
+				set item (countOf + 1) in allTheLines to addBreakBefore(each)
+			end if
+			exit repeat
+			(* 	The next one is looking to see if the line has a colon and counting it as metadata
+				if it does. This was made to follow byWord's syntax highlighting.*)
+		else if doesStringContain(each, characterToCheck) is true then
+			-- keeping track of the paragraph we are on
+			set countOf to countOf + 1
+			-- keeping track of whether a title has been found yet
+			if doesStringContain(each, "title:") then set foundTitle to foundTitle + 1
+		else
+			if foundTitle = 0 then
+				set item (countOf + 1) in allTheLines to "title: " & nameOfFile & addBreakBefore(each)
+			else
+				set item (countOf + 1) in allTheLines to addBreakBefore(each)
+			end if
+			exit repeat
+		end if
+	end repeat
+	-- The list has to be put back together with the same delimiter it was taken apart with or else it will be a find and replace action.
+	set AppleScript's text item delimiters to ASCII character 10
+	set allTheLines to allTheLines as string
+	set AppleScript's text item delimiters to {""}
+	set metadataAndInfo to {allTheLines, countOf}
+	return metadataAndInfo
+end metadataSeperator
+
+-- this one is a mess. perhaps I'm asking it to do too much. If you get problems, you can extract this function and play with it. It seems to be ok, despite being a mess. There were just so many cases to deal with.
+on titleAndLatexInputSorter(textBody, nameOfFile, defaultLatexHeader, defaultLatexBody)
+	set AppleScript's text item delimiters to ASCII character 10
+	set allTheLines to the text items of textBody
+	set AppleScript's text item delimiters to {""}
+	set countOf to 0
+	set locationsOfTitle to {}
+	set locationsOfLatexInput to {}
+	repeat with each in allTheLines
+		set countOf to countOf + 1
+		if doesStringContain(each, "title:") then copy countOf to the end of locationsOfTitle
+		if doesStringContain(each, "latex input:") then copy countOf to the end of locationsOfLatexInput
+	end repeat
+
+	log locationsOfTitle
+	log locationsOfLatexInput
+
+	if (count of locationsOfTitle) is 0 then
+		copy "title: " & nameOfFile to the end of allTheLines
+		set countOf to countOf + 1
+		copy countOf to the end of locationsOfTitle
+		log locationsOfTitle
+		set AppleScript's text item delimiters to ASCII character 10
+		set textBody to text items of allTheLines as string
+		set AppleScript's text item delimiters to {""}
+	end if
+	if (count of locationsOfLatexInput) is 0 then
+		return textBody
+	else if (count of locationsOfLatexInput) is 1 then
+		if item 1 of locationsOfLatexInput is greater than (countOf / 2) then
+			set textBody to "latex input: " & defaultLatexHeader & "
+" & textBody
+			set AppleScript's text item delimiters to ASCII character 10
+			set allTheLines to the text items of textBody
+			set AppleScript's text item delimiters to {""}
+			--display dialog textBody
+			copy ((item 1 of locationsOfLatexInput) + 1) to end of locationsOfLatexInput
+			set item 1 of locationsOfLatexInput to 1
+			set item 1 of locationsOfTitle to ((item 1 of locationsOfTitle) + 1)
+		else
+			copy "latex input: " & defaultLatexBody to the end of allTheLines
+			set countOf to countOf + 1
+			copy countOf to the end of locationsOfLatexInput
+		end if
+	end if
+	log item 1 of locationsOfTitle
+	log item 1 of locationsOfLatexInput
+	-- checks to see if latex inputs are wrapping the metadata rather than being situated within it
+	if 1 is equal to item 1 of locationsOfLatexInput and countOf is equal to item 2 of locationsOfLatexInput then
+	else
+		-- switches the upper 'latex input:' with the item at the very top
+		(* 	Due to the way that Latex processes, you need to have the document class
+		 	defined before you have any of your custom definitions. This prevents stuff
+			from getting lost. *)
+		if item 1 of locationsOfLatexInput is not 1 then
+			set tempHolder to item 1 of allTheLines
+			set item 1 of allTheLines to item (item 1 of locationsOfLatexInput) of allTheLines
+			set item (item 1 of locationsOfLatexInput) of allTheLines to tempHolder
+		end if
+		-- switches the lower 'latex input:' with the item at the very bottom
+		(* 	Due to the way that Latex processes, you need to have the beginning of the
+			document after you have any of your custom definitions. This prevents stuff
+			from getting lost. *)
+		if item 2 of locationsOfLatexInput is not countOf then
+			set tempHolder to item countOf of allTheLines
+			set item countOf of allTheLines to item (item 2 of locationsOfLatexInput) of allTheLines
+			set item (item 2 of locationsOfLatexInput) of allTheLines to tempHolder
+		end if
+	end if
+	set AppleScript's text item delimiters to ASCII character 10
+	set textBody to text items of allTheLines as string
+	set AppleScript's text item delimiters to {""}
+	log textBody
+	return textBody
+end titleAndLatexInputSorter
+
+-- takes the heading, removes any useless stuff surrounding it and passes it back with a line between it and its nearest neighbour
+on turnHeadingIntoMetadata(lineOfText)
+	set lineOfText to blankCharacterRemover(lineOfText, " ")
+	set lineOfText to blankCharacterRemover(lineOfText, "#")
+	set lineOfText to blankCharacterRemover(lineOfText, " ")
+	set lineOfText to "title: " & lineOfText & (ASCII character 10) & (ASCII character 10)
+end turnHeadingIntoMetadata
+
+-- uses the number of items in a list created by chosing a delimiter of the term we are searching for to figure out if a piece of text contains what we are looking for. If you count the number of items you can know how many times the text was divided. If you know how many times it was divided then you can know how many of the thing you divided it with the text has. This one returns a boolean.
+on doesStringContain(textBody, searchTerm)
+	set AppleScript's text item delimiters to {""}
+	set AppleScript's text item delimiters to searchTerm
+	set allText to text items of textBody
+	set AppleScript's text item delimiters to {""}
+	if (count of text items of allText) > 1 then
+		return true
+	else
+		return false
+	end if
+end doesStringContain
+
+-- uses the number of items in a list created by chosing a delimiter of the term we are searching for to figure out if a piece of text contains what we are looking for. If you count the number of items you can know how many times the text was divided. If you know how many times it was divided then you can know how many of the thing you divided it with the text has. This one returns the number found.
+on howManyDoesStringContain(textBody, searchTerm)
+	set AppleScript's text item delimiters to {""}
+	set AppleScript's text item delimiters to searchTerm
+	set allText to text items of textBody
+	set AppleScript's text item delimiters to {""}
+	return ((count of text items of allText) - 1)
+end howManyDoesStringContain
+
+-- removes the chosen character from both ends of a string. For example, it will turn '     Hello       ' into 'Hello'
+on blankCharacterRemover(textBody, characterToRemove)
+	if character 1 of textBody is characterToRemove then
+		set textBody to (characters 2 thru -1 of textBody) as string
+	else if character -1 of textBody is characterToRemove then
+		set textBody to (characters 1 thru -2 of textBody) as string
+	else
+		return textBody
+	end if
+	blankCharacterRemover(textBody, characterToRemove)
+end blankCharacterRemover
+
+
+on addBreakBefore(textInput)
+	set textInput to (ASCII character 10) & (ASCII character 10) & textInput
+end addBreakBefore
+
+-- gets first markdown paragraph (markdown requires 2 returns for a new one)
+on firstPartGetter(textBody)
+	set AppleScript's text item delimiters to (ASCII character 10) & (ASCII character 10)
+	set firstPart to the first text item of textBody
+	set AppleScript's text item delimiters to {""}
+	return firstPart
+	--display dialog firstPart
+end firstPartGetter
+
+-- gets first markdown paragraph (markdown requires 2 returns for a new one) and replaces it with the text of your choosing
+on firstPartReplacer(textBody, replacementText)
+	set text item delimiters to (ASCII character 10) & (ASCII character 10)
+	set textBodyItems to text items of textBody
+	--display dialog (count of textBodyItems)
+	set the first text item of textBodyItems to replacementText
+	set newTextBody to textBodyItems as string
+	set text item delimiters to {""}
+	return newTextBody
+end firstPartReplacer
+
+
+(*	adds a header level command to the beginning of the document mmd uses the lowest one to
+		determine its value so it just slaps one up there regardless. *)
+on addBaseHeaderLevel(textBody, headerLevel)
+	set textBody to "base header level: " & headerLevel & (ASCII character 10) & textBody
+end addBaseHeaderLevel
+
+-- checks to see if doc has sufficient latex inputs and throws them on if not.
+on manageLatexInputs(firstPart, defaultLatexHeader, defaultLatexBody)
+	if howManyDoesStringContain(firstPart, "latex input:") > 0 then
+		return firstPart
+	else
+		set firstPart to wrapInLatexInputs(firstPart, defaultLatexHeader, defaultLatexBody)
+		return firstPart
+	end if
+end manageLatexInputs
+
+
+-- puts items above and below text on new lines
+on wrapInLatexInputs(textBody, latexHeader, latexBody)
+	set textBody to "latex input: " & latexHeader & "
+" & textBody & "
+" & "latex input: " & latexBody
+end wrapInLatexInputs
+
+
+-- checks to see if there is a footer containing a bibliography file reference if there are citations in the document. It adds a footer with that bibliography file reference if it finds citations
+on addBibliographyIfThereAreCitations(textBody, firstPart, latexFooter)
+	if doesStringContain(textBody, "[#") and not doesStringContain(firstPart, "latex footer:") then
+		set firstPart to firstPart & "
+" & "latex footer: " & latexFooter
+	end if
+	return firstPart
+end addBibliographyIfThereAreCitations
+
+on replaceWordsNoSpaces(termSetUp, fileName, originalString, newString)
+
+	do shell script termSetUp & "perl -pi -e 's/" & originalString & "/" & newString & "/g' " & fileName
+
+end replaceWordsNoSpaces
+
+
+-- puts whatever text you give it into a file with whatever name you pass it plus the time of day in seconds (to make it so you alway get unique names (within reason))
+on passTextToTempFile(textToPass, originalFilePath)
+	set FileBase to characters -((offset of "." in (reverse of items of originalFilePath as string)) + 1) thru 1 of originalFilePath as string
+	set suffix to "-temp" & (time of (current date)) & ".txt"
+	set nameOfFile to FileBase & suffix
+	try
+		set referenceNumber to open for access nameOfFile with write permission
+		write textToPass to referenceNumber as «class utf8» starting at 0
+		close access referenceNumber
+	on error eStr number eNum
+		--display dialog eStr & " number " & eNum buttons {"OK"} default button 1 with title "File I/O Error..." with icon caution
+	end try
+	return suffix
+end passTextToTempFile
+
+on bibFileFixer()
+	-- makes a file picker for the user to pick their bib file from
+	set theDialogText to "An error has occured with your bibliography. " & (ASCII character 10) & (ASCII character 10) & "Would you like to check your bibliography for unescaped characters and then attempt to fix them?"
+	display dialog theDialogText buttons {"Don't Continue", "Attempt Fix"} default button "Attempt Fix" cancel button "Don't Continue"
+	set bibFile to choose file with prompt "Select your bib file (a backup will be created before any changes are made)" of type "bib"
+	-- a POSIX path is what you think of when you see a file path User/me/desktop etc. Applescript normally works in a different styl. The POSIX path allows you to manipulate the text easily--say if you wanted to make a backup file
+	set bibFilePOSIX to POSIX path of bibFile
+	-- reads from the bib file that the user selects
+	set theContent to read bibFile as «class utf8»
+	-- changeCount measures if there are any changes so that it doesn't need to do any useless work
+	set changeCount to 0
+	set copyFile to characters 1 thru -((offset of "." in (reverse of items of bibFilePOSIX as string)) + 1) of bibFilePOSIX as string
+	set bibCheck to characters -3 thru -1 of bibFilePOSIX as string
+	if character 1 of bibCheck is "b" and character 2 of bibCheck is "i" and character 3 of bibCheck is "b" then
+	else
+		display dialog "not a bib file"
+		return 1
+	end if
+	-- sets up the naming of a backup file of the bib so none of the user's data is messed without a backup of the previous state
+	set copyFile to copyFile & "-backup-" & (time of (current date)) & ".bib"
+	set copyFile to nameProtector(copyFile)
+	set bibFilePOSIX to nameProtector(bibFilePOSIX)
+
+	-- sends the body of the text through a find and replace function. Notice the space in front of the & and note that ASCII character 92 is the '\' symbol. This will find &s with space in front of them and slap a \ in there. It returns a list with the first item being the content itself and the second being the number of changes that it made. See the applescriptFindAndReplace function for more info on how it works.
+	set ampersandEscaped to applescriptFindAndReplace(theContent, " &", " " & (ASCII character 92) & "&")
+	set newContent to item 1 of ampersandEscaped
+	set changeCount to changeCount + (item 2 of ampersandEscaped)
+
+	-- same as above but with $ now
+	set dollarSignEscaped to applescriptFindAndReplace(newContent, " $", " " & (ASCII character 92) & "$")
+	set newContent to item 1 of dollarSignEscaped
+	set changeCount to changeCount + (item 2 of dollarSignEscaped)
+
+	--avoids doing the work if there is no work to be done
+	if changeCount is less than 1 then
+		display dialog "no unescaped '$' or '&' found and no changes made"
+	else
+		try
+			-- creates the backup file
+			do shell script "cp " & bibFilePOSIX & " " & copyFile
+			-- writes the modified text to the users original bibFile
+			set fd to open for access bibFile with write permission
+			set eof of fd to 0
+			write newContent to fd as «class utf8»
+			close access fd
+		on error
+			display dialog "It didn't let me write to your file"
+			close access bibFile
+		end try
+	end if
+end bibFileFixer
+
+
+on applescriptFindAndReplace(textBody, stringToFind, stringToReplace)
+	-- sets the text delimiters so that the text is broken apart at every place where it finds the specific combination
+	set {oldTID, AppleScript's text item delimiters} to {AppleScript's text item delimiters, stringToFind}
+	-- creates an array of all the newly found text items (e.g. if you set the text item delimiters to to " " it will turn "hello how are you" into {"hello", "how", "are", "you"}
+	set ti to every text item of textBody
+	-- just checks to see if it finds any at all. If the array only has one item. It means that there are no delimiters in the text.
+	if (count of items in ti) is greater than 1 then
+		set foundItems to (count of items in ti) - 1
+		display dialog "The script found and will attempt to escape " & foundItems & " unescaped '" & stringToFind & "'"
+	else
+		set foundItems to 0
+	end if
+	set AppleScript's text item delimiters to stringToReplace
+	-- turns the array back into a string with the new value in between the items. If there is only one item, there are no places where the new value will be put in because there is only one item in the array.
+	set newContent to ti as string
+	set AppleScript's text item delimiters to oldTID
+	return {newContent, foundItems}
+end applescriptFindAndReplace
